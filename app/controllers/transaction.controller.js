@@ -11,7 +11,10 @@ exports.create = (req, res) => {
     'INSERT INTO transactions (total, paymentMethod) VALUES (?, ?)',
     [total, paymentMethod],
     (err, result) => {
-      if (err) res.status(500).send({ message: err.message })
+      if (err) {
+        res.status(500).send({ message: err.message })
+        return
+      }
 
       products.map((product) => {
         db.query(
@@ -39,16 +42,28 @@ exports.create = (req, res) => {
 }
 
 exports.findAll = (req, res) => {
-  const { paymentMethod } = req.query
+  const { startDate, endDate } = req.query
 
   let sql =
-    'SELECT * FROM transaction_items JOIN transactions ON transaction_items.transactionId = transactions.id JOIN products ON transaction_items.productId = products.id'
-  if (paymentMethod !== undefined) {
-    sql += ` WHERE paymentMethod LIKE ?`
+    'SELECT transactions.id, transactions.total, transactions.paymentMethod, transactions.createdAt, products.barcode, products.name, products.price, transaction_items.count ' +
+    'FROM transaction_items JOIN transactions ON transaction_items.transactionId = transactions.id JOIN products ON transaction_items.productId = products.id '
+
+  if (startDate !== undefined) {
+    sql += `WHERE transactions.createdAt >= '${startDate}'`
+    if (endDate !== undefined) {
+      sql += `AND transactions.createdAt <= '${endDate}'`
+    }
+  } else {
+    if (endDate !== undefined) {
+      sql += `WHERE transactions.createdAt <= '${endDate}'`
+    }
   }
 
-  db.query(sql, [`%${paymentMethod}%`], (err, result) => {
-    if (err) res.status(500).send({ message: err.message })
+  db.query(sql, (err, result) => {
+    if (err) {
+      res.status(500).send({ message: err.message })
+      return
+    }
 
     if (result.length === 0) {
       res.send({
@@ -59,10 +74,10 @@ exports.findAll = (req, res) => {
 
     const data = [{ id: 0 }]
     result.map((r) => {
-      if (data[data.length - 1].id !== r.transactionId) {
+      if (data[data.length - 1].id !== r.id) {
         if (data[0].id === 0) data.pop()
         data.push({
-          id: r.transactionId,
+          id: r.id,
           total: r.total,
           paymentMethod: r.paymentMethod,
           createdAt: r.createdAt,
@@ -100,7 +115,9 @@ exports.findById = (req, res) => {
     (err, result) => {
       if (err) {
         res.status(500).send({ message: err.message })
+        return
       }
+
       if (result.length === 0) {
         res.status(404).send({ message: 'transaksi tidak ditemukan' })
         return
